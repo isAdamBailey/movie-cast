@@ -80,7 +80,7 @@ onMounted(() => {
           <div class="px-3 pb-3">
             <button
               type="button"
-              class="w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100"
+              class="w-full rounded-md bg-rose-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-rose-500"
               @click="requestRemoveFavorite(movie)"
             >
               Remove from Favorites

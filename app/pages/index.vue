@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { CastMember, FavoriteMovie, MovieCreditsResponse, MovieDetailsResponse, MovieSummary } from '~/types'
+import type { CastMember, FavoriteMovie, MovieCreditsResponse, MovieDetailsResponse, MovieSearchResult } from '~/types'
 
 interface SpeechRecognitionResultItem {
   transcript: string
@@ -37,6 +37,7 @@ interface WindowWithSpeechRecognition extends Window {
 const runtimeConfig = useRuntimeConfig()
 const route = useRoute()
 const searchQuery = ref('')
+const searchResults = ref<MovieSearchResult[]>([])
 const movieTitle = ref('')
 const castMembers = ref<CastMember[]>([])
 const movieDetails = ref<MovieDetailsResponse | null>(null)
@@ -47,6 +48,7 @@ const isVoiceSupported = ref(false)
 const isListening = ref(false)
 const isSpeechSynthesisSupported = ref(false)
 const speakingMemberId = ref<number | null>(null)
+const isSpeakingDescription = ref(false)
 const isRemoveDialogOpen = ref(false)
 const pendingRemoveMovie = ref<FavoriteMovie | null>(null)
 const { loadFavorites, isFavorite, addFavorite, removeFavorite } = useFavoriteMovies()
@@ -55,10 +57,29 @@ let recognition: SpeechRecognitionLike | null = null
 
 const baseImageUrl = runtimeConfig.public.tmdbBaseImageUrl
 const currentYear = new Date().getFullYear()
+const getReleaseYear = (releaseDate: string) => {
+  return releaseDate ? releaseDate.slice(0, 4) : 'Unknown year'
+}
+
+const speakMovieTitle = (title: string) => {
+  if (!import.meta.client || !title.trim()) {
+    return
+  }
+
+  if (!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) {
+    return
+  }
+
+  const utterance = new SpeechSynthesisUtterance(title)
+  utterance.lang = 'en-US'
+  window.speechSynthesis.cancel()
+  window.speechSynthesis.speak(utterance)
+}
 
 const loadMovieById = async (movieId: number, preferredTitle?: string) => {
   isLoading.value = true
   hasSearched.value = true
+  searchResults.value = []
   castMembers.value = []
   movieTitle.value = ''
   movieDetails.value = null
@@ -73,6 +94,7 @@ const loadMovieById = async (movieId: number, preferredTitle?: string) => {
     movieTitle.value = preferredTitle || details.title
     castMembers.value = credits.cast
     movieDetails.value = details
+    speakMovieTitle(movieTitle.value)
   } catch {
     errorMessage.value = 'Unable to fetch movie data right now.'
   } finally {
@@ -83,26 +105,44 @@ const loadMovieById = async (movieId: number, preferredTitle?: string) => {
 const onSubmit = async () => {
   const query = searchQuery.value.trim()
   errorMessage.value = ''
+  hasSearched.value = true
+  isLoading.value = true
+  searchResults.value = []
+  castMembers.value = []
+  movieTitle.value = ''
+  movieDetails.value = null
 
   if (!query) {
+    isLoading.value = false
     errorMessage.value = 'Enter a movie title to search.'
     return
   }
 
   try {
-    const movie = await $fetch<MovieSummary | null>('/api/movies/search', {
+    const movies = await $fetch<MovieSearchResult[]>('/api/movies/search', {
       query: { query }
     })
 
-    if (!movie) {
+    if (!movies.length) {
       errorMessage.value = 'No matching movie was found.'
       return
     }
 
-    await loadMovieById(movie.id, movie.title)
+    if (movies.length === 1) {
+      await loadMovieById(movies[0].id, movies[0].title)
+      return
+    }
+
+    searchResults.value = movies
   } catch {
     errorMessage.value = 'Unable to fetch movie data right now.'
+  } finally {
+    isLoading.value = false
   }
+}
+
+const onSelectSearchResult = async (movie: MovieSearchResult) => {
+  await loadMovieById(movie.id, movie.title)
 }
 
 const getProfileImageUrl = (profilePath: string) => `${baseImageUrl}${profilePath}`
@@ -243,13 +283,55 @@ const speakCharacter = (member: CastMember) => {
     speakingMemberId.value = null
   }
 
-  utterance.onerror = () => {
+  utterance.onerror = (event: SpeechSynthesisErrorEvent) => {
     speakingMemberId.value = null
+
+    if (event.error === 'canceled' || event.error === 'interrupted') {
+      return
+    }
+
     errorMessage.value = 'Speech synthesis failed. Please try again.'
   }
 
   window.speechSynthesis.cancel()
   speakingMemberId.value = member.id
+  window.speechSynthesis.speak(utterance)
+}
+
+const speakMovieDescription = () => {
+  if (!isSpeechSynthesisSupported.value || !movieDetails.value) {
+    return
+  }
+
+  if (isSpeakingDescription.value) {
+    window.speechSynthesis.cancel()
+    isSpeakingDescription.value = false
+    return
+  }
+
+  const description = movieDetails.value.overview?.trim()
+  if (!description) {
+    errorMessage.value = 'No movie description is available to speak.'
+    return
+  }
+
+  const utterance = new SpeechSynthesisUtterance(description)
+  utterance.lang = 'en-US'
+  utterance.onend = () => {
+    isSpeakingDescription.value = false
+  }
+  utterance.onerror = (event: SpeechSynthesisErrorEvent) => {
+    isSpeakingDescription.value = false
+
+    if (event.error === 'canceled' || event.error === 'interrupted') {
+      return
+    }
+
+    errorMessage.value = 'Speech synthesis failed. Please try again.'
+  }
+
+  window.speechSynthesis.cancel()
+  isSpeakingDescription.value = true
   window.speechSynthesis.speak(utterance)
 }
 
@@ -280,7 +362,7 @@ watch(
         <div class="flex justify-end">
           <NuxtLink
             to="/favorites"
-            class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+            class="rounded-md bg-violet-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-violet-500"
           >
             Favorites
           </NuxtLink>
@@ -326,6 +408,36 @@ watch(
         {{ errorMessage }}
       </p>
 
+      <section v-if="searchResults.length > 1 && !movieTitle" class="mx-auto max-w-3xl space-y-3">
+        <h2 class="text-lg font-semibold text-slate-900">
+          Multiple movies found. Choose one:
+        </h2>
+        <div class="space-y-2">
+          <button
+            v-for="movie in searchResults"
+            :key="movie.id"
+            type="button"
+            class="w-full rounded-lg border border-slate-300 bg-white p-3 text-left transition hover:border-slate-400 hover:bg-slate-50"
+            @click="onSelectSearchResult(movie)"
+          >
+            <div class="flex items-center gap-3">
+              <img
+                v-if="movie.poster_path"
+                :src="getMovieImageUrl(movie.poster_path)"
+                :alt="movie.title"
+                class="h-16 w-12 rounded object-cover"
+                loading="lazy"
+              >
+              <div v-else class="h-16 w-12 rounded bg-slate-200" />
+              <div>
+                <span class="block font-medium text-slate-900">{{ movie.title }}</span>
+                <span class="text-sm text-slate-600">({{ getReleaseYear(movie.release_date) }})</span>
+              </div>
+            </div>
+          </button>
+        </div>
+      </section>
+
       <section v-if="movieTitle" class="space-y-4">
         <div v-if="movieDetails" class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div class="grid gap-4 p-4 md:grid-cols-2">
@@ -336,7 +448,10 @@ watch(
                 </h2>
                 <button
                   type="button"
-                  class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100"
+                  :class="[
+                    'rounded-md px-3 py-1.5 text-xs font-medium text-white transition',
+                    isCurrentMovieFavorite ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-600 hover:bg-emerald-500'
+                  ]"
                   @click="onFavoriteButtonClick"
                 >
                   {{ isCurrentMovieFavorite ? 'Remove from Favorites' : 'Set as Favorite' }}
@@ -348,6 +463,14 @@ watch(
               <p class="text-sm leading-6 text-slate-700">
                 {{ movieDetails.overview || 'No description available.' }}
               </p>
+              <button
+                v-if="isSpeechSynthesisSupported"
+                type="button"
+                class="w-full rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-blue-500"
+                @click="speakMovieDescription"
+              >
+                {{ isSpeakingDescription ? 'Stop Description' : 'Speak Description' }}
+              </button>
             </div>
 
             <div class="overflow-hidden rounded-lg bg-slate-200">
@@ -407,7 +530,7 @@ watch(
               <button
                 v-if="isSpeechSynthesisSupported"
                 type="button"
-                class="mt-2 rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-100"
+                class="mt-2 w-full rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500"
                 @click="speakCharacter(member)"
               >
                 {{ speakingMemberId === member.id ? 'Stop' : 'Speak' }}

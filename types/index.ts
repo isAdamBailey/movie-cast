@@ -2,11 +2,7 @@ export interface MovieSearchResult {
   id: number
   title: string
   release_date: string
-}
-
-export interface MovieSummary {
-  id: number
-  title: string
+  poster_path: string | null
 }
 
 export interface CastMember {
