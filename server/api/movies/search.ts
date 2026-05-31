@@ -1,11 +1,6 @@
-import type { MovieSearchResponse } from '~/types'
+import type { MovieSearchResponse, MovieSummary } from '../../../types'
 
-interface SearchMovieResponse {
-  id: number
-  title: string
-}
-
-export default defineEventHandler(async (event): Promise<SearchMovieResponse | null> => {
+export default defineEventHandler(async (event): Promise<MovieSummary | null> => {
   const query = getQuery(event).query
 
   if (typeof query !== 'string' || !query.trim()) {

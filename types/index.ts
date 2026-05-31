@@ -4,6 +4,11 @@ export interface MovieSearchResult {
   release_date: string
 }
 
+export interface MovieSummary {
+  id: number
+  title: string
+}
+
 export interface CastMember {
   id: number
   name: string
@@ -17,4 +22,21 @@ export interface MovieSearchResponse {
 
 export interface MovieCreditsResponse {
   cast: CastMember[]
+}
+
+export interface MovieVideoResult {
+  key: string
+  site: string
+  type: string
+  official: boolean
+}
+
+export interface MovieDetailsResponse {
+  id: number
+  title: string
+  overview: string
+  release_date: string
+  poster_path: string | null
+  backdrop_path: string | null
+  trailer_key: string | null
 }

@@ -1,4 +1,4 @@
-import type { MovieCreditsResponse } from '~/types'
+import type { MovieCreditsResponse } from '../../../../types'
 
 export default defineEventHandler(async (event): Promise<MovieCreditsResponse> => {
   const id = getRouterParam(event, 'id')
