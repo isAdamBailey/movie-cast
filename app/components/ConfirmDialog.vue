@@ -85,20 +85,20 @@ onBeforeUnmount(() => {
         {{ message }}
       </p>
       <div class="mt-5 flex justify-end gap-2">
-        <button
+        <AppButton
           type="button"
-          class="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+          color="outline"
+          size="md"
+          :text="cancelText"
           @click="onCancel"
-        >
-          {{ cancelText }}
-        </button>
-        <button
+        />
+        <AppButton
           type="button"
-          class="rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-slate-700"
+          color="slate"
+          size="md"
+          :text="confirmText"
           @click="onConfirm"
-        >
-          {{ confirmText }}
-        </button>
+        />
       </div>
     </div>
   </div>

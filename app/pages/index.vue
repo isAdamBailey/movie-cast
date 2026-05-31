@@ -362,12 +362,12 @@ watch(
         <div class="flex justify-end">
           <NuxtLink
             to="/favorites"
-            class="rounded-md bg-violet-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-violet-500"
+            class="rounded-md bg-violet-600 px-4 py-2.5 text-base font-medium text-white transition duration-200 ease-out hover:bg-violet-500 active:scale-95"
           >
             Favorites
           </NuxtLink>
         </div>
-        <h1 class="text-3xl font-bold tracking-tight sm:text-4xl">
+        <h1 class="font-serif text-4xl font-bold tracking-tight text-slate-950 sm:text-5xl md:text-6xl">
           Movie Cast Lookup
         </h1>
         <p class="text-sm text-slate-600 sm:text-base">
@@ -382,22 +382,22 @@ watch(
           placeholder="Search a movie title"
           class="w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5 outline-none transition focus:border-slate-500"
         >
-        <button
+        <AppButton
           v-if="isVoiceSupported"
           type="button"
+          color="outline"
+          size="md"
+          :text="isListening ? 'Stop' : 'Voice'"
           :disabled="isLoading"
-          class="rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
           @click="toggleVoiceSearch"
-        >
-          {{ isListening ? 'Stop' : 'Voice' }}
-        </button>
-        <button
+        />
+        <AppButton
           type="submit"
+          color="slate"
+          size="md"
+          :text="isLoading ? 'Searching...' : 'Search'"
           :disabled="isLoading"
-          class="rounded-lg bg-slate-900 px-5 py-2.5 font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-500"
-        >
-          {{ isLoading ? 'Searching...' : 'Search' }}
-        </button>
+        />
       </form>
 
       <p v-if="isListening" class="text-center text-xs font-medium text-slate-600">
@@ -413,11 +413,13 @@ watch(
           Multiple movies found. Choose one:
         </h2>
         <div class="space-y-2">
-          <button
+          <AppButton
             v-for="movie in searchResults"
             :key="movie.id"
             type="button"
-            class="w-full rounded-lg border border-slate-300 bg-white p-3 text-left transition hover:border-slate-400 hover:bg-slate-50"
+            color="outline"
+            :full-width="true"
+            class="rounded-lg p-3 text-left hover:border-slate-400 hover:bg-slate-50 active:scale-[0.99]"
             @click="onSelectSearchResult(movie)"
           >
             <div class="flex items-center gap-3">
@@ -434,7 +436,7 @@ watch(
                 <span class="text-sm text-slate-600">({{ getReleaseYear(movie.release_date) }})</span>
               </div>
             </div>
-          </button>
+          </AppButton>
         </div>
       </section>
 
@@ -446,16 +448,13 @@ watch(
                 <h2 class="text-2xl font-bold">
                   {{ movieDetails.title }}
                 </h2>
-                <button
+                <AppButton
                   type="button"
-                  :class="[
-                    'rounded-md px-3 py-1.5 text-xs font-medium text-white transition',
-                    isCurrentMovieFavorite ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-600 hover:bg-emerald-500'
-                  ]"
+                  :color="isCurrentMovieFavorite ? 'rose' : 'emerald'"
+                  size="md"
+                  :text="isCurrentMovieFavorite ? 'Remove from Favorites' : 'Set as Favorite'"
                   @click="onFavoriteButtonClick"
-                >
-                  {{ isCurrentMovieFavorite ? 'Remove from Favorites' : 'Set as Favorite' }}
-                </button>
+                />
               </div>
               <p v-if="movieDetails.release_date" class="text-sm text-slate-600">
                 Released: {{ movieDetails.release_date }}
@@ -463,14 +462,15 @@ watch(
               <p class="text-sm leading-6 text-slate-700">
                 {{ movieDetails.overview || 'No description available.' }}
               </p>
-              <button
+              <AppButton
                 v-if="isSpeechSynthesisSupported"
                 type="button"
-                class="w-full rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-blue-500"
+                color="blue"
+                size="md"
+                :full-width="true"
+                :text="isSpeakingDescription ? 'Stop Description' : 'Speak Description'"
                 @click="speakMovieDescription"
-              >
-                {{ isSpeakingDescription ? 'Stop Description' : 'Speak Description' }}
-              </button>
+              />
             </div>
 
             <div class="overflow-hidden rounded-lg bg-slate-200">
@@ -527,14 +527,16 @@ watch(
               <p class="text-xs text-slate-600">
                 Played by {{ member.name }}
               </p>
-              <button
+              <AppButton
                 v-if="isSpeechSynthesisSupported"
                 type="button"
-                class="mt-2 w-full rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500"
+                color="indigo"
+                size="md"
+                :full-width="true"
+                class="mt-2"
+                :text="speakingMemberId === member.id ? 'Stop' : 'Speak'"
                 @click="speakCharacter(member)"
-              >
-                {{ speakingMemberId === member.id ? 'Stop' : 'Speak' }}
-              </button>
+              />
             </div>
           </article>
         </div>

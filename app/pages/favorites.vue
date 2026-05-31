@@ -43,7 +43,7 @@ onMounted(() => {
       <header class="space-y-3">
         <NuxtLink
           to="/"
-          class="inline-flex rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+          class="inline-flex rounded-md border border-slate-300 bg-white px-4 py-2.5 text-base font-medium text-slate-700 transition duration-200 ease-out hover:bg-slate-100 active:scale-95"
         >
           Back to Search
         </NuxtLink>
@@ -78,13 +78,14 @@ onMounted(() => {
             </div>
           </NuxtLink>
           <div class="px-3 pb-3">
-            <button
+            <AppButton
               type="button"
-              class="w-full rounded-md bg-rose-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-rose-500"
+              color="rose"
+              size="md"
+              :full-width="true"
+              text="Remove from Favorites"
               @click="requestRemoveFavorite(movie)"
-            >
-              Remove from Favorites
-            </button>
+            />
           </div>
         </article>
       </div>
