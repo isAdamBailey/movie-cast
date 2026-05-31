@@ -40,3 +40,9 @@ export interface MovieDetailsResponse {
   backdrop_path: string | null
   trailer_key: string | null
 }
+
+export interface FavoriteMovie {
+  id: number
+  title: string
+  image_path: string | null
+}

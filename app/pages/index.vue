@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { CastMember, MovieCreditsResponse, MovieDetailsResponse, MovieSummary } from '~/types'
+import type { CastMember, FavoriteMovie, MovieCreditsResponse, MovieDetailsResponse, MovieSummary } from '~/types'
 
 interface SpeechRecognitionResultItem {
   transcript: string
@@ -35,6 +35,7 @@ interface WindowWithSpeechRecognition extends Window {
 }
 
 const runtimeConfig = useRuntimeConfig()
+const route = useRoute()
 const searchQuery = ref('')
 const movieTitle = ref('')
 const castMembers = ref<CastMember[]>([])
@@ -44,11 +45,40 @@ const errorMessage = ref('')
 const hasSearched = ref(false)
 const isVoiceSupported = ref(false)
 const isListening = ref(false)
+const isSpeechSynthesisSupported = ref(false)
+const speakingMemberId = ref<number | null>(null)
+const isRemoveDialogOpen = ref(false)
+const pendingRemoveMovie = ref<FavoriteMovie | null>(null)
+const { loadFavorites, isFavorite, addFavorite, removeFavorite } = useFavoriteMovies()
 
 let recognition: SpeechRecognitionLike | null = null
 
 const baseImageUrl = runtimeConfig.public.tmdbBaseImageUrl
 const currentYear = new Date().getFullYear()
+
+const loadMovieById = async (movieId: number, preferredTitle?: string) => {
+  isLoading.value = true
+  hasSearched.value = true
+  castMembers.value = []
+  movieTitle.value = ''
+  movieDetails.value = null
+  errorMessage.value = ''
+
+  try {
+    const [credits, details] = await Promise.all([
+      $fetch<MovieCreditsResponse>(`/api/movies/${movieId}/credits`),
+      $fetch<MovieDetailsResponse>(`/api/movies/${movieId}/details`)
+    ])
+
+    movieTitle.value = preferredTitle || details.title
+    castMembers.value = credits.cast
+    movieDetails.value = details
+  } catch {
+    errorMessage.value = 'Unable to fetch movie data right now.'
+  } finally {
+    isLoading.value = false
+  }
+}
 
 const onSubmit = async () => {
   const query = searchQuery.value.trim()
@@ -58,12 +88,6 @@ const onSubmit = async () => {
     errorMessage.value = 'Enter a movie title to search.'
     return
   }
-
-  isLoading.value = true
-  hasSearched.value = true
-  castMembers.value = []
-  movieTitle.value = ''
-  movieDetails.value = null
 
   try {
     const movie = await $fetch<MovieSummary | null>('/api/movies/search', {
@@ -75,17 +99,9 @@ const onSubmit = async () => {
       return
     }
 
-    const [credits, details] = await Promise.all([
-      $fetch<MovieCreditsResponse>(`/api/movies/${movie.id}/credits`),
-      $fetch<MovieDetailsResponse>(`/api/movies/${movie.id}/details`)
-    ])
-    movieTitle.value = movie.title
-    castMembers.value = credits.cast
-    movieDetails.value = details
+    await loadMovieById(movie.id, movie.title)
   } catch {
     errorMessage.value = 'Unable to fetch movie data right now.'
-  } finally {
-    isLoading.value = false
   }
 }
 
@@ -98,8 +114,63 @@ const trailerEmbedUrl = computed(() => {
 
   return `https://www.youtube-nocookie.com/embed/${movieDetails.value.trailer_key}`
 })
+const currentFavoriteMovie = computed<FavoriteMovie | null>(() => {
+  if (!movieDetails.value) {
+    return null
+  }
+
+  return {
+    id: movieDetails.value.id,
+    title: movieDetails.value.title,
+    image_path: movieDetails.value.poster_path || movieDetails.value.backdrop_path
+  }
+})
+const isCurrentMovieFavorite = computed(() => {
+  if (!movieDetails.value) {
+    return false
+  }
+
+  return isFavorite(movieDetails.value.id)
+})
+const removeDialogMessage = computed(() => {
+  if (!pendingRemoveMovie.value) {
+    return 'Remove this movie from favorites?'
+  }
+
+  return `Remove ${pendingRemoveMovie.value.title} from favorites?`
+})
+
+const onFavoriteButtonClick = () => {
+  if (!currentFavoriteMovie.value) {
+    return
+  }
+
+  if (isCurrentMovieFavorite.value) {
+    pendingRemoveMovie.value = currentFavoriteMovie.value
+    isRemoveDialogOpen.value = true
+    return
+  }
+
+  addFavorite(currentFavoriteMovie.value)
+}
+
+const confirmRemoveCurrentMovie = () => {
+  if (!pendingRemoveMovie.value) {
+    return
+  }
+
+  removeFavorite(pendingRemoveMovie.value.id)
+  pendingRemoveMovie.value = null
+}
+
+const cancelRemoveCurrentMovie = () => {
+  pendingRemoveMovie.value = null
+}
 
 onMounted(() => {
+  loadFavorites()
+  isSpeechSynthesisSupported.value = 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window
+
   const speechWindow = window as WindowWithSpeechRecognition
   const Recognition = speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition
 
@@ -152,12 +223,68 @@ const toggleVoiceSearch = () => {
   isListening.value = true
   recognition.start()
 }
+
+const speakCharacter = (member: CastMember) => {
+  if (!isSpeechSynthesisSupported.value) {
+    return
+  }
+
+  if (speakingMemberId.value === member.id) {
+    window.speechSynthesis.cancel()
+    speakingMemberId.value = null
+    return
+  }
+
+  const characterName = member.character?.trim() || 'Unknown character'
+  const utterance = new SpeechSynthesisUtterance(characterName)
+  utterance.lang = 'en-US'
+
+  utterance.onend = () => {
+    speakingMemberId.value = null
+  }
+
+  utterance.onerror = () => {
+    speakingMemberId.value = null
+    errorMessage.value = 'Speech synthesis failed. Please try again.'
+  }
+
+  window.speechSynthesis.cancel()
+  speakingMemberId.value = member.id
+  window.speechSynthesis.speak(utterance)
+}
+
+onBeforeUnmount(() => {
+  if (recognition && isListening.value) {
+    recognition.stop()
+  }
+  if (isSpeechSynthesisSupported.value) {
+    window.speechSynthesis.cancel()
+  }
+})
+
+watch(
+  () => route.query.movieId,
+  (movieId) => {
+    if (typeof movieId === 'string' && /^\d+$/.test(movieId)) {
+      void loadMovieById(Number(movieId))
+    }
+  },
+  { immediate: true }
+)
 </script>
 
 <template>
   <main class="flex min-h-screen flex-col bg-slate-100 text-slate-900">
     <div class="mx-auto w-full max-w-6xl flex-1 space-y-8 px-4 py-10">
       <header class="space-y-2 text-center">
+        <div class="flex justify-end">
+          <NuxtLink
+            to="/favorites"
+            class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+          >
+            Favorites
+          </NuxtLink>
+        </div>
         <h1 class="text-3xl font-bold tracking-tight sm:text-4xl">
           Movie Cast Lookup
         </h1>
@@ -203,9 +330,18 @@ const toggleVoiceSearch = () => {
         <div v-if="movieDetails" class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div class="grid gap-4 p-4 md:grid-cols-2">
             <div class="space-y-3">
-              <h2 class="text-2xl font-bold">
-                {{ movieDetails.title }}
-              </h2>
+              <div class="flex flex-wrap items-center gap-3">
+                <h2 class="text-2xl font-bold">
+                  {{ movieDetails.title }}
+                </h2>
+                <button
+                  type="button"
+                  class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100"
+                  @click="onFavoriteButtonClick"
+                >
+                  {{ isCurrentMovieFavorite ? 'Remove from Favorites' : 'Set as Favorite' }}
+                </button>
+              </div>
               <p v-if="movieDetails.release_date" class="text-sm text-slate-600">
                 Released: {{ movieDetails.release_date }}
               </p>
@@ -268,6 +404,14 @@ const toggleVoiceSearch = () => {
               <p class="text-xs text-slate-600">
                 Played by {{ member.name }}
               </p>
+              <button
+                v-if="isSpeechSynthesisSupported"
+                type="button"
+                class="mt-2 rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-100"
+                @click="speakCharacter(member)"
+              >
+                {{ speakingMemberId === member.id ? 'Stop' : 'Speak' }}
+              </button>
             </div>
           </article>
         </div>
@@ -278,6 +422,16 @@ const toggleVoiceSearch = () => {
       </p>
 
     </div>
+    <ConfirmDialog
+      v-model="isRemoveDialogOpen"
+      title="Remove Favorite"
+      :message="removeDialogMessage"
+      confirm-text="Remove"
+      cancel-text="Cancel"
+      :speak="true"
+      @confirm="confirmRemoveCurrentMovie"
+      @cancel="cancelRemoveCurrentMovie"
+    />
     <footer class="mt-auto border-t border-slate-200 px-4 py-6 text-center text-sm text-slate-600">
       Copyright {{ currentYear }}
       <a
